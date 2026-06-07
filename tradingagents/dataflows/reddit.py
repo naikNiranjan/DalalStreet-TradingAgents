@@ -40,10 +40,12 @@ _RSS = "https://www.reddit.com/r/{sub}/search.rss?{qs}"
 _UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
 _ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
 
-# Default subreddits ordered roughly by signal density for ticker-specific
-# discussion. wallstreetbets has the most volume but most noise; stocks /
-# investing trend more measured. Caller can override.
-DEFAULT_SUBREDDITS = ("wallstreetbets", "stocks", "investing")
+# Default subreddits for Indian-market discussion (Phase 2). r/IndianStockMarket
+# is the highest-volume India trading sub; r/IndiaInvestments is more measured /
+# long-term; r/DalalStreetTalks is trader-oriented. Caller can override (the
+# sentiment analyst passes config["reddit_subreddits"]). US subs intentionally
+# dropped — this is an NSE/BSE agent.
+DEFAULT_SUBREDDITS = ("IndianStockMarket", "IndiaInvestments", "DalalStreetTalks")
 
 
 def _search_qs(ticker: str, limit: int) -> str:
@@ -150,19 +152,24 @@ def fetch_reddit_posts(
     ``inter_request_delay`` keeps us under Reddit's public rate limit
     (~10 req/min per IP) even if the caller queries many subreddits.
     """
+    # Search by the base symbol, not the exchange-suffixed ticker: Reddit users
+    # write "RELIANCE", not "RELIANCE.NS", so searching the raw ticker misses
+    # nearly everything for Indian names.
+    search_term = ticker.split(".")[0].strip() or ticker
+
     blocks = []
     total_posts = 0
     for i, sub in enumerate(subreddits):
         if i > 0:
             time.sleep(inter_request_delay)
-        posts = _fetch_subreddit(ticker, sub, limit_per_sub, timeout)
+        posts = _fetch_subreddit(search_term, sub, limit_per_sub, timeout)
         total_posts += len(posts)
         if not posts:
-            blocks.append(f"r/{sub}: <no posts found mentioning {ticker.upper()} in the past 7 days>")
+            blocks.append(f"r/{sub}: <no posts found mentioning {search_term.upper()} in the past 7 days>")
             continue
 
         via_rss = any(p.get("source") == "rss" for p in posts)
-        header = f"r/{sub} — {len(posts)} recent posts mentioning {ticker.upper()}"
+        header = f"r/{sub} — {len(posts)} recent posts mentioning {search_term.upper()}"
         header += " (via RSS feed; scores/comments unavailable):" if via_rss else ":"
         lines = [header]
         for p in posts:
@@ -189,7 +196,7 @@ def fetch_reddit_posts(
 
     if total_posts == 0:
         return (
-            f"<no Reddit posts found mentioning {ticker.upper()} across "
+            f"<no Reddit posts found mentioning {search_term.upper()} across "
             f"{', '.join(f'r/{s}' for s in subreddits)} in the past 7 days>"
         )
     return "\n\n".join(blocks)

@@ -111,15 +111,21 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "news_article_limit": 20,             # max articles per ticker (ticker-news)
     "global_news_article_limit": 10,      # max articles for global/macro news
     "global_news_lookback_days": 7,       # macro news lookback window
-    # Search queries used by get_global_news for macro headlines. Extend or
-    # replace to broaden geographic / sector coverage.
+    # Search queries used by get_global_news for macro headlines. India-focused
+    # for NSE/BSE trading (Phase 2): RBI policy, FII/DII flows, Budget/SEBI,
+    # USD-INR + crude (India imports ~90% of oil), and index/sector context.
+    # Extend or replace to broaden coverage.
     "global_news_queries": [
-        "Federal Reserve interest rates inflation",
-        "S&P 500 earnings GDP economic outlook",
-        "geopolitical risk trade war sanctions",
-        "ECB Bank of England BOJ central bank policy",
-        "oil commodities supply chain energy",
+        "RBI monetary policy repo rate MPC inflation CPI",
+        "Nifty 50 Sensex Indian stock market outlook earnings",
+        "FII DII flows foreign institutional investors India equity",
+        "Union Budget SEBI regulation GST India economy GDP",
+        "USD INR rupee crude oil Brent India imports",
     ],
+    # Subreddits the sentiment analyst searches (Phase 2: Indian-market subs,
+    # replacing the US r/wallstreetbets etc.). Treat social sentiment as a
+    # manipulation-prone signal, especially for illiquid small-caps.
+    "reddit_subreddits": ["IndianStockMarket", "IndiaInvestments", "DalalStreetTalks"],
     # Data vendor configuration
     # Category-level configuration (default for all tools in category)
     "data_vendors": {
@@ -130,6 +136,9 @@ DEFAULT_CONFIG = _apply_env_overrides({
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
+        # India macro/market news from RSS (ET, Moneycontrol, LiveMint, Hindu
+        # BusinessLine). Falls back to yfinance automatically if feeds unreachable.
+        "get_global_news": "india_rss",
         # Example: "get_stock_data": "alpha_vantage",  # Override category default
     },
     # Benchmark for alpha calculation in the reflection layer.
