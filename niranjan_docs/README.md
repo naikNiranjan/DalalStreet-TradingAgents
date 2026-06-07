@@ -25,7 +25,10 @@ Indian-market (NSE/BSE) automated trading agent** — paper-trading first, then 
 | 09 | [Open Questions / Decisions](./09-open-questions.md) | Things the reviewer/Niranjan must decide before coding |
 | 10 | [Agent Operating Layer](./10-agent-operating-layer.md) | **Deferred** Hermes-inspired layer (skills/memory/cron/toolsets) — built after the spine |
 | 11 | [Success Metrics](./11-success-metrics.md) | The paper→live gate. Defined **before** coding so results can't be rationalized |
+| 12 | [Phase 3 Execution Spine](./12-phase3-execution-spine.md) | **Plan** locking the Phase 3 contracts (SignalDecision, security master, fail-closed gates, paper fills, audit, report) before code |
 
+> Phase results live alongside the plan docs: [phase0](./phase0-results.md) ·
+> [phase1](./phase1-run-results.md) · [phase2](./phase2-results.md).
 > Historical review snapshots live in [`archive/`](./archive/) — superseded, kept for provenance only.
 
 ## TL;DR
