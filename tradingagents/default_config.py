@@ -122,6 +122,12 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "Union Budget SEBI regulation GST India economy GDP",
         "USD INR rupee crude oil Brent India imports",
     ],
+    # NSE trading holidays (YYYY-MM-DD). When empty/None, the calendar falls
+    # back to a CONSERVATIVE built-in set (fixed-date national holidays only).
+    # ⚠️ Populate with the full official NSE list (incl. movable holidays: Holi,
+    # Good Friday, Eid, Diwali/Muhurat, etc.) before live trading. See
+    # tradingagents/dataflows/india_calendar.py.
+    "nse_holidays": [],
     # Subreddits the sentiment analyst searches (Phase 2: Indian-market subs,
     # replacing the US r/wallstreetbets etc.). Treat social sentiment as a
     # manipulation-prone signal, especially for illiquid small-caps.
@@ -139,7 +145,16 @@ DEFAULT_CONFIG = _apply_env_overrides({
         # India macro/market news from RSS (ET, Moneycontrol, LiveMint, Hindu
         # BusinessLine). Falls back to yfinance automatically if feeds unreachable.
         "get_global_news": "india_rss",
-        # Example: "get_stock_data": "alpha_vantage",  # Override category default
+        # India fundamentals: screener.in key-ratios + Pros/Cons enrichment layered
+        # on top of yfinance (fail-soft — degrades to yfinance alone).
+        "get_fundamentals": "india_screener",
+        # India prices/indicators from Angel One SmartAPI (NSE/BSE cash equities).
+        # route_to_vendor auto-appends yfinance as fallback, so non-India tickers
+        # (no .NS/.BO suffix) and any Angel outage transparently use yfinance.
+        # Requires ANGELONE_* creds in .env; without them the adapter disables
+        # itself (no network) and yfinance serves the request.
+        "get_stock_data": "angelone",
+        "get_indicators": "angelone",
     },
     # Benchmark for alpha calculation in the reflection layer.
     # ``benchmark_ticker`` (when set) overrides the suffix map for all

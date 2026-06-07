@@ -12,6 +12,8 @@ from .y_finance import (
 )
 from .yfinance_news import get_news_yfinance, get_global_news_yfinance
 from .india_news import get_news_india, get_global_news_india
+from .india_fundamentals import get_fundamentals_india
+from .angel_one import get_stock_data_angel, get_indicators_angel
 from .alpha_vantage import (
     get_stock as get_alpha_vantage_stock,
     get_indicator as get_alpha_vantage_indicator,
@@ -65,23 +67,28 @@ TOOLS_CATEGORIES = {
 VENDOR_LIST = [
     "yfinance",
     "alpha_vantage",
-    "india_rss",  # India market news RSS (ET, Moneycontrol, LiveMint, Hindu BusinessLine)
+    "india_rss",      # India market news RSS (ET, Moneycontrol, LiveMint, Hindu BusinessLine)
+    "india_screener",  # screener.in fundamentals enrichment + yfinance
+    "angelone",        # Angel One SmartAPI — NSE/BSE OHLCV + indicators (yfinance fallback)
 ]
 
 # Mapping of methods to their vendor-specific implementations
 VENDOR_METHODS = {
     # core_stock_apis
     "get_stock_data": {
+        "angelone": get_stock_data_angel,
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
     },
     # technical_indicators
     "get_indicators": {
+        "angelone": get_indicators_angel,
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
     },
     # fundamental_data
     "get_fundamentals": {
+        "india_screener": get_fundamentals_india,
         "alpha_vantage": get_alpha_vantage_fundamentals,
         "yfinance": get_yfinance_fundamentals,
     },

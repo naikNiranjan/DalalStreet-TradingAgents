@@ -29,10 +29,27 @@ _API_KEY_ENV_VARS = (
 )
 
 
+# Angel One (SmartAPI) credential vars. Importing ``tradingagents`` loads the
+# developer's real ``.env`` into os.environ, so without this guard any test that
+# routes ``get_stock_data``/``get_indicators`` through the default vendor would fire
+# a LIVE Angel login + network call. We blank them so the adapter disables itself
+# (no network) and the router falls back to yfinance, keeping the suite offline.
+_ANGEL_ENV_VARS = (
+    "ANGELONE_API_KEY",
+    "ANGELONE_CLIENT_CODE",
+    "ANGELONE_PIN",
+    "ANGELONE_TOTP_SECRET",
+)
+
+
 @pytest.fixture(autouse=True)
 def _dummy_api_keys(monkeypatch):
     for env_var in _API_KEY_ENV_VARS:
         monkeypatch.setenv(env_var, os.environ.get(env_var, "placeholder"))
+    # Disable Angel One for the whole suite (see note above). Tests that want the
+    # adapter active set these explicitly inside the test.
+    for env_var in _ANGEL_ENV_VARS:
+        monkeypatch.setenv(env_var, "")
 
 
 @pytest.fixture()

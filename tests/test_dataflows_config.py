@@ -20,8 +20,11 @@ class DataflowsConfigIsolationTests(unittest.TestCase):
         cfg["tool_vendors"]["get_stock_data"] = "alpha_vantage"
 
         fresh = get_config()
+        # Mutating the returned config must not leak into a fresh copy: nested
+        # dict values revert to their defaults (yfinance category default;
+        # angelone is the India prices default — see default_config tool_vendors).
         self.assertEqual(fresh["data_vendors"]["core_stock_apis"], "yfinance")
-        self.assertNotIn("get_stock_data", fresh["tool_vendors"])
+        self.assertEqual(fresh["tool_vendors"]["get_stock_data"], "angelone")
 
     def test_set_config_does_not_alias_caller_nested_dicts(self):
         custom = copy.deepcopy(default_config.DEFAULT_CONFIG)
