@@ -55,6 +55,30 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "llm_provider": "openai",
     "deep_think_llm": "gpt-5.5",
     "quick_think_llm": "gpt-5.4-mini",
+    # Tier fallbacks for the azure-foundry provider specifically. The global
+    # deep/quick defaults above are GPT ids that only exist on the *openai*
+    # provider; under azure-foundry an unmapped role (bull/bear/trader/risk
+    # debators -> quick tier) must fall back to a model actually deployed on the
+    # Foundry resource. These are used in place of deep_think_llm/quick_think_llm
+    # only when llm_provider == "azure-foundry" (see trading_graph._build_llms).
+    "azure_foundry_deep_think_llm": "gpt-5.5",
+    "azure_foundry_quick_think_llm": "DeepSeek-V4-Flash",
+    # Role-based model routing. ONLY consulted when llm_provider ==
+    # "azure-foundry"; for every other provider this map is ignored and all
+    # agents use deep_think_llm / quick_think_llm as before (back-compat).
+    # Keys are the agent roles defined in tradingagents/graph/setup.py. Any role
+    # not listed here falls back to its tier default (managers/PM -> deep,
+    # everything else -> quick). A/B-revisable; reviewer-confirmed defaults.
+    "model_roles": {
+        "portfolio_manager": "gpt-5.5",          # T1 deep/critical
+        "research_manager":  "claude-sonnet-4-6", # T1 deep/critical
+        "market":            "grok-4.3",          # T2 strong+cheap
+        "news":              "DeepSeek-V4-Pro",   # T2
+        "fundamentals":      "DeepSeek-V4-Pro",   # T2
+        "social":            "DeepSeek-V4-Flash", # T3 utility (sentiment)
+        # bull_researcher / bear_researcher / trader / aggressive_debator /
+        # neutral_debator / conservative_debator -> quick-tier fallback
+    },
     # When None, each provider's client falls back to its own default endpoint
     # (api.openai.com for OpenAI, generativelanguage.googleapis.com for Gemini, ...).
     # The CLI overrides this per provider when the user picks one. Keeping a

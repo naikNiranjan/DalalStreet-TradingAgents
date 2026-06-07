@@ -85,21 +85,11 @@ class TradingAgentsGraph:
         if self.callbacks:
             llm_kwargs["callbacks"] = self.callbacks
 
-        deep_client = create_llm_client(
-            provider=self.config["llm_provider"],
-            model=self.config["deep_think_llm"],
-            base_url=self.config.get("backend_url"),
-            **llm_kwargs,
-        )
-        quick_client = create_llm_client(
-            provider=self.config["llm_provider"],
-            model=self.config["quick_think_llm"],
-            base_url=self.config.get("backend_url"),
-            **llm_kwargs,
-        )
-
-        self.deep_thinking_llm = deep_client.get_llm()
-        self.quick_thinking_llm = quick_client.get_llm()
+        (
+            self.deep_thinking_llm,
+            self.quick_thinking_llm,
+            self.role_llms,
+        ) = self._build_llms(llm_kwargs)
         
         self.memory_log = TradingMemoryLog(self.config)
 
@@ -117,6 +107,7 @@ class TradingAgentsGraph:
             self.tool_nodes,
             self.conditional_logic,
             analyst_concurrency_limit=self.config.get("analyst_concurrency_limit", 1),
+            role_llms=self.role_llms,
         )
 
         self.propagator = Propagator(
@@ -163,6 +154,48 @@ class TradingAgentsGraph:
             kwargs["temperature"] = float(temperature)
 
         return kwargs
+
+    def _build_llms(self, llm_kwargs: Dict[str, Any]):
+        """Build the deep/quick LLMs and (for azure-foundry) the per-role map.
+
+        Returns ``(deep_llm, quick_llm, role_llms)``. ``role_llms`` is an empty
+        dict for every provider except ``azure-foundry``, so non-foundry runs
+        behave exactly as before (deep/quick only). Models are cached by id so a
+        model used for several roles (or for deep+a role) is built once.
+        """
+        provider = self.config["llm_provider"]
+        base_url = self.config.get("backend_url")
+        cache: Dict[str, Any] = {}
+
+        def build(model_id: str):
+            if model_id not in cache:
+                cache[model_id] = create_llm_client(
+                    provider=provider, model=model_id, base_url=base_url, **llm_kwargs
+                ).get_llm()
+            return cache[model_id]
+
+        is_foundry = provider.lower() == "azure-foundry"
+        # Under azure-foundry the global deep/quick defaults are GPT ids that
+        # don't exist on the Foundry resource, so use the foundry-specific tier
+        # fallbacks (which point at deployed Foundry models). Falls back to the
+        # global keys if the foundry keys are unset.
+        if is_foundry:
+            deep_model = self.config.get("azure_foundry_deep_think_llm") or self.config["deep_think_llm"]
+            quick_model = self.config.get("azure_foundry_quick_think_llm") or self.config["quick_think_llm"]
+        else:
+            deep_model = self.config["deep_think_llm"]
+            quick_model = self.config["quick_think_llm"]
+
+        deep_llm = build(deep_model)
+        quick_llm = build(quick_model)
+
+        role_llms: Dict[str, Any] = {}
+        if is_foundry:
+            for role, model_id in (self.config.get("model_roles") or {}).items():
+                if model_id:
+                    role_llms[role] = build(model_id)
+
+        return deep_llm, quick_llm, role_llms
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""

@@ -90,6 +90,17 @@ _DEFAULT = ModelCapabilities(
     preferred_structured_method="function_calling",
 )
 
+# xAI Grok (4.x) on Azure Foundry's OpenAI-compatible endpoint accepts
+# tool_choice, json_mode, and json_schema (verified by the Phase 1 benchmark:
+# basic + tool-call + structured all pass). Same shape as _DEFAULT but named so
+# the routing intent is explicit and testable.
+_GROK = ModelCapabilities(
+    supports_tool_choice=True,
+    supports_json_mode=True,
+    supports_json_schema=True,
+    preferred_structured_method="function_calling",
+)
+
 
 # Exact-ID matches take precedence over pattern matches.
 _BY_ID: dict[str, ModelCapabilities] = {
@@ -97,6 +108,15 @@ _BY_ID: dict[str, ModelCapabilities] = {
     "deepseek-reasoner": _DEEPSEEK_THINKING,
     "deepseek-v4-flash": _DEEPSEEK_THINKING,
     "deepseek-v4-pro": _DEEPSEEK_THINKING,
+    # Azure AI Foundry uses CAPITALIZED deployment ids (+ optional date suffix).
+    # Exact-match is case-sensitive, so register these explicitly or they would
+    # fall through to _DEFAULT and wrongly send tool_choice (DeepSeek V4 rejects
+    # it -> HTTP 400). The ``^DeepSeek-V\d`` pattern below covers date-suffixed
+    # and future capitalized variants.
+    "DeepSeek-V4-Flash": _DEEPSEEK_THINKING,
+    "DeepSeek-V4-Pro": _DEEPSEEK_THINKING,
+    # xAI Grok on Foundry (OpenAI-compatible path).
+    "grok-4.3": _GROK,
     # MiniMax — full official model lineup per
     # platform.minimax.io/docs/api-reference/text-openai-api
     "MiniMax-M2.7": _MINIMAX_THINKING,
@@ -112,6 +132,8 @@ _BY_ID: dict[str, ModelCapabilities] = {
 # or ``MiniMax-M3*`` variants inherit the thinking-mode quirks automatically.
 _BY_PATTERN: list[tuple[re.Pattern[str], ModelCapabilities]] = [
     (re.compile(r"^deepseek-v\d"), _DEEPSEEK_THINKING),
+    # Capitalized Azure Foundry ids, incl. date-suffixed (DeepSeek-V4-Pro-2026-04-23).
+    (re.compile(r"^DeepSeek-V\d"), _DEEPSEEK_THINKING),
     (re.compile(r"^deepseek-reasoner"), _DEEPSEEK_THINKING),
     (re.compile(r"^MiniMax-M\d"), _MINIMAX_THINKING),
 ]
