@@ -21,7 +21,25 @@ from tradingagents.agents.utils.structured import (
 )
 
 
-def create_portfolio_manager(llm):
+def create_portfolio_manager(llm, rules_digest=None):
+    """Create the Portfolio Manager node.
+
+    Parameters
+    ----------
+    llm:
+        The LLM to use for generating the portfolio decision.
+    rules_digest:
+        Optional binding-rules digest string (from ``render_digest().text``).
+        When truthy, it is prepended to the prompt as a labelled preamble so
+        the PM sees the alignment context before the rest of the prompt.
+        When None/falsy (the default), the prompt is byte-for-byte identical
+        to the pre-digest implementation — no change to the default code path.
+
+    Notes
+    -----
+    The digest is ALIGNMENT only. It cannot stop an order. The deterministic
+    risk gates in ``execution/`` are the final backstop.
+    """
     structured_llm = bind_structured(llm, PortfolioDecision, "Portfolio Manager")
 
     def portfolio_manager_node(state) -> dict:
@@ -62,6 +80,13 @@ def create_portfolio_manager(llm):
 ---
 
 Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
+
+        # Prepend the digest as a labelled preamble when provided.
+        # The digest is ALIGNMENT only — it does not enforce anything.
+        # When rules_digest is None/falsy, the prompt string is byte-for-byte
+        # identical to the original (above), so no existing test can break.
+        if rules_digest:
+            prompt = rules_digest + "\n\n---\n\n" + prompt
 
         # return_parsed=True so we also keep the typed PortfolioDecision: the
         # execution layer derives confidence from its ``conviction`` field, which

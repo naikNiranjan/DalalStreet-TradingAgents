@@ -22,6 +22,7 @@ class GraphSetup:
         conditional_logic: ConditionalLogic,
         analyst_concurrency_limit: int = 1,
         role_llms: Dict[str, Any] = None,
+        rules_digest: str = None,
     ):
         """Initialize with required components.
 
@@ -29,6 +30,11 @@ class GraphSetup:
         azure-foundry provider). When a role is absent, the agent falls back to
         its tier default: ``deep_thinking_llm`` for managers/PM, otherwise
         ``quick_thinking_llm`` — i.e. exactly the pre-routing behavior.
+
+        ``rules_digest`` is an optional compact binding-rules digest string
+        (from ``render_digest().text``) that is forwarded to the Portfolio
+        Manager. When None (the default), the PM prompt is byte-for-byte
+        unchanged. See doc 16 / ``inject_rules_digest`` config flag.
         """
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
@@ -36,6 +42,7 @@ class GraphSetup:
         self.conditional_logic = conditional_logic
         self.analyst_concurrency_limit = analyst_concurrency_limit
         self.role_llms = role_llms or {}
+        self.rules_digest = rules_digest
 
     def _llm_for(self, role: str, tier: str) -> Any:
         """Return the LLM for ``role``, falling back to the ``tier`` default.
@@ -84,7 +91,10 @@ class GraphSetup:
         aggressive_analyst = create_aggressive_debator(self._llm_for("aggressive_debator", "quick"))
         neutral_analyst = create_neutral_debator(self._llm_for("neutral_debator", "quick"))
         conservative_analyst = create_conservative_debator(self._llm_for("conservative_debator", "quick"))
-        portfolio_manager_node = create_portfolio_manager(self._llm_for("portfolio_manager", "deep"))
+        portfolio_manager_node = create_portfolio_manager(
+            self._llm_for("portfolio_manager", "deep"),
+            rules_digest=self.rules_digest,
+        )
 
         # Create workflow
         workflow = StateGraph(AgentState)

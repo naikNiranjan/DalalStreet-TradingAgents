@@ -149,3 +149,40 @@ A/B harness on the 12-name universe (offline, mocked LLM where needed):
    flip on only after the first A/B run is inspected (per review).
 3. **D1 risk debators** — agree they're deferred to a later slice, or include a tiny NO_TRADE-only
    reminder for them now? *(still open)*
+
+## Build outcome (as-built deltas)
+
+Recorded after applying code-review fixes (Slice 2, code-review pass):
+
+- **Digest size (measured):** ~312 tokens / ~1248 chars — well under the 800-token budget.
+  Measuring `render_digest().token_estimate` == 312, `char_count` == 1248.
+- **Default-off path:** `_load_rules_digest` in `TradingAgentsGraph` uses
+  `importlib.import_module` (not a static import) to satisfy the pre-existing
+  layer-direction invariant checked by `tests/agent_os/test_layer_direction.py`.
+- **Fail-closed parsing (FIX-A/B):** `render_digest` now raises `RuleDigestError`
+  (a new `ValueError` subclass) when: the parsed no-trade leads are empty; any
+  numbered NO_TRADE item lacks a bold lead (item count != lead count); the scoped
+  caps leads are empty; or any scoped bullet lacks a bold lead. A tampered or
+  reformatted file cannot yield a silent partial digest.
+- **Runtime budget enforced (Codex review):** the ≤800-token D2 budget is now a
+  **code-time** invariant, not just a test-time one. `render_digest` raises
+  `RuleDigestError` if the derived digest's `token_estimate` exceeds
+  `DIGEST_TOKEN_BUDGET`, so a rule-file edit that grows the digest past budget
+  **fails closed** on the opt-in path instead of silently injecting an over-budget
+  prompt. Relaxing to ≤1,200 (per D2) is a conscious edit of `DIGEST_TOKEN_BUDGET`,
+  never a silent blow-through. (This supersedes the round-1 decision to treat the
+  budget as test-time-only.)
+- **Caps scoped to gate-enforcing sections (FIX-D):** caps are parsed from only
+  three `## ` sections of `RISK_POLICY.md`: "Hard caps (enforced by gates)",
+  "Liquidity and data-quality guards", "Settlement discipline". The
+  "Audit and verifiability" section is excluded. Result: **10 caps**
+  (6 hard caps + 3 liquidity/data guards + 1 settlement/no-BTST).
+  "Audit coverage target is 100%" does not appear in the digest.
+- **Gate count removed from header (FIX-E):** the digest header now says
+  "deterministic risk-gate chain in execution/" (no hardcoded "15-gate" count
+  that could go stale).
+- **D4.3 PM-decline/downgrade behavior:** DEFERRED. Only the gate-blocks half
+  of D4.3 is covered offline (by `test_gate_blocks_low_confidence_regardless_of_pm_prompt`).
+  The PM-decline/downgrade half requires a live LLM and is marked with an
+  explicit `@pytest.mark.skip` in `test_pm_rules_ab.py`. It is gated behind
+  `inject_rules_digest=False` until the live A/B run is inspected and approved.

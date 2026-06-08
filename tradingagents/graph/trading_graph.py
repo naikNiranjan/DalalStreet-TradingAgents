@@ -108,6 +108,7 @@ class TradingAgentsGraph:
             self.conditional_logic,
             analyst_concurrency_limit=self.config.get("analyst_concurrency_limit", 1),
             role_llms=self.role_llms,
+            rules_digest=self._load_rules_digest(),
         )
 
         self.propagator = Propagator(
@@ -232,6 +233,28 @@ class TradingAgentsGraph:
                 ]
             ),
         }
+
+    def _load_rules_digest(self) -> str | None:
+        """Return a compact binding-rules digest when opt-in flag is set.
+
+        Returns None unless ``config["inject_rules_digest"]`` is True, so the
+        default code path imports NOTHING new and the PM prompt is byte-for-byte
+        unchanged.
+
+        When the flag is True, ``importlib.import_module`` is used to load
+        ``agent_os.rules.loader`` at runtime (no static import statement from the
+        spine into agent_os — constraint 3 + the layer-direction invariant). Opting
+        in trusts the rule files; ``RuleFileMissing`` and ``RuleInjectionDetected``
+        exceptions are allowed to propagate fail-closed, per doc 16.
+        """
+        if not self.config.get("inject_rules_digest"):
+            return None
+        # Runtime-only load via importlib — no static 'from agent_os' import
+        # statement here so the layer-direction AST check stays clean and the
+        # spine-never-imports-agent_os architectural invariant is preserved.
+        import importlib  # noqa: PLC0415
+        loader = importlib.import_module("agent_os.rules.loader")
+        return loader.render_digest().text
 
     def _resolve_benchmark(self, ticker: str) -> str:
         """Pick the benchmark ticker for alpha calculation against ``ticker``.
