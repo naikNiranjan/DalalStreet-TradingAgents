@@ -152,22 +152,44 @@ class SecurityMaster:
 
     # --- live refresh (not exercised in unit tests) ------------------------
 
-    def refresh_from_angel(self, symbols: Iterable[str], *, save_to: Optional[str] = None) -> None:
+    def refresh_from_angel(
+        self,
+        symbols: Iterable[str],
+        *,
+        save_to: Optional[str] = None,
+        delay_s: float = 1.0,
+        max_retries: int = 5,
+        sleep=None,
+    ) -> None:
         """Populate angel_token (and exchange) for ``symbols`` via SmartAPI searchScrip.
 
         Reuses the cached login + token resolution in ``dataflows.angel_one``. Cash
         equity tick/lot are standard (0.05 / 1). Live call — never used in CI.
+
+        Angel rate-limits ``searchScrip``, so resolving the whole universe back-to-back
+        trips "Access denied because of exceeding access rate". We therefore (a) throttle
+        ``delay_s`` between symbols and (b) retry **rate-limit** errors with exponential
+        backoff (up to ``max_retries``). Genuine not-found errors are NOT retried. The
+        cost is paid once per day if the caller caches the result (see the runner).
+        ``sleep`` is injectable so tests run instantly.
         """
+        import time as _time
+
         from tradingagents.dataflows.angel_one import (
             _exchange_for,
             _get_client,
             _resolve_token,
         )
 
+        sleep = sleep or _time.sleep
         client = _get_client()
-        for symbol in symbols:
+        symbols = list(symbols)
+        for i, symbol in enumerate(symbols):
             exchange, base = _exchange_for(symbol)
-            token = _resolve_token(client, base, exchange)
+            token = self._resolve_with_backoff(
+                _resolve_token, client, base, exchange,
+                max_retries=max_retries, delay_s=delay_s, sleep=sleep,
+            )
             self._by_symbol[symbol] = Instrument(
                 symbol=symbol,
                 exchange=exchange,
@@ -178,8 +200,24 @@ class SecurityMaster:
                 board_lot=1,
                 tradable=True,
             )
+            if i < len(symbols) - 1:
+                sleep(delay_s)  # gentle inter-call throttle to respect Angel's rate limit
         if save_to:
             self.save(save_to)
+
+    @staticmethod
+    def _resolve_with_backoff(resolve, client, base, exchange, *, max_retries, delay_s, sleep):
+        """Call ``resolve`` retrying ONLY Angel rate-limit errors with exponential backoff."""
+        last_exc: Optional[Exception] = None
+        for attempt in range(max(1, max_retries)):
+            try:
+                return resolve(client, base, exchange)
+            except Exception as exc:  # noqa: BLE001
+                if "access rate" not in str(exc).lower():
+                    raise  # not a throttle error (e.g. genuine not-found) -> fail fast
+                last_exc = exc
+                sleep(delay_s * (2 ** attempt))  # 1x, 2x, 4x, ... backoff
+        raise last_exc  # exhausted retries (still rate-limited)
 
 
 _BLANK = Instrument(symbol="", exchange="", angel_token="", isin="", lot_size=1, tick_size=0.05)

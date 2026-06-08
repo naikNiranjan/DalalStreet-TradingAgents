@@ -50,23 +50,6 @@ class TestPaperSessionScript:
         assert shadow.capital == 25_000.0
         assert shadow.config.position_cap_init == 0.35
 
-    def test_security_master_setup_always_refreshes(self, monkeypatch):
-        """Reviewer finding #1: the SM is refreshed in EVERY mode (incl. analysis-only),
-        so sm_refreshed_at is real and 'security master' freshness gets stamped — never
-        None (which would block every trade in a later --exec-only run)."""
-        mod = _load()
-        calls = {"n": 0}
-
-        def fake_refresh(self, symbols, *, save_to=None):
-            calls["n"] += 1  # populate nothing; just prove the LIVE refresh fired
-
-        monkeypatch.setattr(
-            "execution.security_master.SecurityMaster.refresh_from_angel", fake_refresh
-        )
-        sm, refreshed_at = mod._build_security_master()
-        assert calls["n"] == 1          # refresh happens regardless of run mode
-        assert refreshed_at is not None  # a real timestamp to stamp into signal freshness
-
     def test_llm_provider_defaults_to_foundry_not_openai(self):
         """The paper session must run on Azure Foundry (role-routed), never silently
         on the bare-default OpenAI endpoint. CLI > env > azure-foundry."""
@@ -74,3 +57,106 @@ class TestPaperSessionScript:
         assert mod._resolve_llm_provider(None, None) == "azure-foundry"
         assert mod._resolve_llm_provider(None, "openai") == "openai"        # env respected
         assert mod._resolve_llm_provider("anthropic", "openai") == "anthropic"  # CLI wins
+
+    # --- security-master daily cache (avoid re-hammering Angel's rate limit) -----
+
+    def test_build_sm_uses_fresh_cache_without_refreshing(self, tmp_path, monkeypatch):
+        from datetime import datetime
+        from execution.config import UNIVERSE
+        from execution.security_master import SecurityMaster
+        mod = _load()
+
+        cache = str(tmp_path / "sm.json")
+        seeded = SecurityMaster.from_records(
+            [{"symbol": s, "exchange": "NSE", "angel_token": "1"} for s in UNIVERSE]
+        )
+        refreshed_at = datetime(2026, 6, 8, 9, 30)
+        mod._save_security_master_cache(seeded, cache, refreshed_at)
+
+        calls = {"n": 0}
+        monkeypatch.setattr(
+            "execution.security_master.SecurityMaster.refresh_from_angel",
+            lambda self, *a, **k: calls.__setitem__("n", calls["n"] + 1),
+        )
+        sm, ts = mod._build_security_master(
+            cache_path=cache, max_age_hours=20, now=datetime(2026, 6, 8, 14, 0),
+        )
+        assert calls["n"] == 0                  # NO live refresh — cache hit
+        assert ts == refreshed_at                # honest refresh time for freshness
+        assert sm.lookup(UNIVERSE[0]).angel_token == "1"
+
+    def test_build_sm_refreshes_when_cache_missing(self, tmp_path, monkeypatch):
+        from datetime import datetime
+        from execution.config import UNIVERSE
+        from execution.security_master import SecurityMaster
+        mod = _load()
+
+        monkeypatch.setattr(
+            mod, "default_universe_master",
+            lambda: SecurityMaster.from_records(
+                [{"symbol": s, "exchange": "NSE", "angel_token": "9"} for s in UNIVERSE]
+            ),
+        )
+        calls = {"n": 0}
+        monkeypatch.setattr(
+            "execution.security_master.SecurityMaster.refresh_from_angel",
+            lambda self, *a, **k: calls.__setitem__("n", calls["n"] + 1),
+        )
+        sm, ts = mod._build_security_master(
+            cache_path=str(tmp_path / "missing.json"), max_age_hours=20,
+            now=datetime(2026, 6, 8, 14, 0),
+        )
+        assert calls["n"] == 1                   # cache miss -> one live refresh
+        assert ts is not None                    # real timestamp -> stamps 'security master' freshness
+
+    def test_build_sm_rejects_stale_cache(self, tmp_path, monkeypatch):
+        from datetime import datetime
+        from execution.config import UNIVERSE
+        from execution.security_master import SecurityMaster
+        mod = _load()
+
+        cache = str(tmp_path / "sm.json")
+        seeded = SecurityMaster.from_records(
+            [{"symbol": s, "exchange": "NSE", "angel_token": "1"} for s in UNIVERSE]
+        )
+        mod._save_security_master_cache(seeded, cache, datetime(2026, 6, 7, 9, 30))  # yesterday
+        monkeypatch.setattr(
+            mod, "default_universe_master",
+            lambda: SecurityMaster.from_records(
+                [{"symbol": s, "exchange": "NSE", "angel_token": "9"} for s in UNIVERSE]
+            ),
+        )
+        calls = {"n": 0}
+        monkeypatch.setattr(
+            "execution.security_master.SecurityMaster.refresh_from_angel",
+            lambda self, *a, **k: calls.__setitem__("n", calls["n"] + 1),
+        )
+        sm, ts = mod._build_security_master(
+            cache_path=cache, max_age_hours=20, now=datetime(2026, 6, 8, 14, 0),
+        )
+        assert calls["n"] == 1                   # >20h old -> refuse cache, refresh
+
+    def test_build_sm_rejects_blank_token_cache(self, tmp_path, monkeypatch):
+        from datetime import datetime
+        from execution.config import UNIVERSE
+        from execution.security_master import SecurityMaster, default_universe_master
+        mod = _load()
+
+        cache = str(tmp_path / "sm.json")
+        # blank-token master (as default_universe_master seeds) is useless -> must refuse
+        mod._save_security_master_cache(default_universe_master(), cache, datetime(2026, 6, 8, 9, 30))
+        monkeypatch.setattr(
+            mod, "default_universe_master",
+            lambda: SecurityMaster.from_records(
+                [{"symbol": s, "exchange": "NSE", "angel_token": "9"} for s in UNIVERSE]
+            ),
+        )
+        calls = {"n": 0}
+        monkeypatch.setattr(
+            "execution.security_master.SecurityMaster.refresh_from_angel",
+            lambda self, *a, **k: calls.__setitem__("n", calls["n"] + 1),
+        )
+        sm, ts = mod._build_security_master(
+            cache_path=cache, max_age_hours=20, now=datetime(2026, 6, 8, 14, 0),
+        )
+        assert calls["n"] == 1                   # blank tokens -> refuse, refresh

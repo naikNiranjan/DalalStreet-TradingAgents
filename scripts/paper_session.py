@@ -27,6 +27,7 @@ Examples
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from datetime import date, datetime
@@ -40,10 +41,17 @@ if _REPO_ROOT not in sys.path:
 from execution.brokers.angel_quotes import AngelQuoteAdapter
 from execution.calendar_guard import assert_calendar_ready
 from execution.config import UNIVERSE, default_books
-from execution.security_master import default_universe_master
+from execution.security_master import SecurityMaster, default_universe_master
 from execution.session import run_session
 from tradingagents.dataflows.india_calendar import IST
 from tradingagents.default_config import DEFAULT_CONFIG
+
+# Daily security-master cache: resolved tokens don't change intraday, so we refresh
+# from Angel ONCE per day and reuse — otherwise re-resolving 12 symbols on every run
+# (analysis + drill + live) trips Angel's searchScrip rate limit. 20h < the gate's
+# security_master_max_age_hours (24) so a served cache is never stale at the gate.
+DEFAULT_SM_CACHE = os.path.join("runs", "security-master.json")
+SM_CACHE_MAX_AGE_HOURS = 20
 
 
 def _parse_args(argv=None) -> argparse.Namespace:
@@ -84,22 +92,60 @@ def _select_books(which: str):
     return tuple(b for b in books if b.name == which)
 
 
-def _build_security_master():
-    """Build the universe security master and refresh tokens from Angel (LIVE).
+def _sm_meta_path(cache_path: str) -> str:
+    return cache_path + ".meta.json"
 
-    Done in EVERY mode (analysis, exec, full) — NOT gated on the run mode:
-      * the execution pass needs the resolved tokens for the FULL quote read, and
-      * the analysis pass needs the refresh timestamp to stamp the critical
-        ``security master`` freshness into each persisted signal. If analysis
-        skipped the refresh, ``--exec-only`` would later load signals whose
-        critical ``security master`` source is missing and the freshness gate
-        would block every trade — silently breaking the advertised split flow.
+
+def _save_security_master_cache(sm: SecurityMaster, cache_path: str, refreshed_at: datetime) -> None:
+    """Persist the resolved master + its refresh time (sidecar) for same-day reuse."""
+    os.makedirs(os.path.dirname(cache_path) or ".", exist_ok=True)
+    sm.save(cache_path)
+    with open(_sm_meta_path(cache_path), "w", encoding="utf-8") as fh:
+        json.dump({"refreshed_at": refreshed_at.isoformat()}, fh)
+
+
+def _load_cached_security_master(cache_path: str, *, max_age_hours: float, now: datetime):
+    """Return ``(sm, refreshed_at)`` from a fresh, fully-tokened cache, else ``None``."""
+    meta = _sm_meta_path(cache_path)
+    if not (os.path.exists(cache_path) and os.path.exists(meta)):
+        return None
+    try:
+        with open(meta, encoding="utf-8") as fh:
+            refreshed_at = datetime.fromisoformat(json.load(fh)["refreshed_at"])
+    except Exception:  # noqa: BLE001 — corrupt meta -> treat as no cache
+        return None
+    if (now - refreshed_at).total_seconds() / 3600.0 > max_age_hours:
+        return None  # too old -> would be stale at the freshness gate
+    sm = SecurityMaster.from_file(cache_path)
+    # A cache with any blank token is useless (quote fetch would fail closed) -> refuse it.
+    if not all(s in sm and sm.lookup(s).has_token for s in UNIVERSE):
+        return None
+    return sm, refreshed_at
+
+
+def _build_security_master(*, cache_path: str = DEFAULT_SM_CACHE,
+                           max_age_hours: float = SM_CACHE_MAX_AGE_HOURS, now: datetime = None):
+    """Build the universe security master, reusing a same-day cache when possible.
+
+    Refresh happens in EVERY mode (analysis, exec, full): the execution pass needs the
+    resolved tokens for the FULL quote read, and the analysis pass needs the refresh
+    timestamp to stamp the critical ``security master`` freshness into each persisted
+    signal (so a later ``--exec-only`` run doesn't block every trade on a missing
+    source). To avoid re-hammering Angel's rate-limited ``searchScrip`` on every run,
+    a fresh on-disk cache (default ``runs/security-master.json``) is reused if present.
 
     Returns ``(security_master, refreshed_at)``.
     """
-    security_master = default_universe_master()
-    security_master.refresh_from_angel(UNIVERSE)
-    return security_master, datetime.now(IST)
+    now = now or datetime.now(IST)
+    cached = _load_cached_security_master(cache_path, max_age_hours=max_age_hours, now=now)
+    if cached is not None:
+        return cached
+
+    sm = default_universe_master()
+    sm.refresh_from_angel(UNIVERSE)            # LIVE — throttled + retried (rate-limit safe)
+    refreshed_at = datetime.now(IST)
+    _save_security_master_cache(sm, cache_path, refreshed_at)
+    return sm, refreshed_at
 
 
 def main(argv=None) -> int:
@@ -127,7 +173,10 @@ def main(argv=None) -> int:
 
     # --- security master: refresh tokens from Angel (LIVE), in EVERY mode ------
     # (analysis stamps the 'security master' freshness; exec needs the tokens).
-    security_master, sm_refreshed_at = _build_security_master()
+    # Reuses a same-day on-disk cache to stay within Angel's searchScrip rate limit.
+    security_master, sm_refreshed_at = _build_security_master(now=now_ist)
+    print(f"  security master: {len(security_master)} instruments "
+          f"(refreshed {sm_refreshed_at.isoformat()})")
 
     # --- analysis graph (LIVE LLM) — only when we will analyze -----------------
     graph = None
