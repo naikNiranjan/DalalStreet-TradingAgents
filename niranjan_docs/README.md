@@ -1,8 +1,9 @@
 # DalalStreet-TradingAgents — Planning Docs
 
-> **Status:** PLANNING ONLY. No implementation has started. These documents are
-> meant to be reviewed (by a second AI agent and by Niranjan) **before** a single
-> line of code is written.
+> **Status:** IMPLEMENTATION UNDERWAY. The execution spine (Phase 0–3) and the Agent
+> Operating Layer first slice are **built and committed** (`6ce5db1`); these docs are the
+> living plan + record. New plans (e.g. docs 16/17) still go through
+> plan → review → fix → build (tests-first) → review → commit **before** any code.
 
 This folder contains the complete plan to adapt
 [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
@@ -28,7 +29,9 @@ Indian-market (NSE/BSE) automated trading agent** — paper-trading first, then 
 | 12 | [Phase 3 Execution Spine](./12-phase3-execution-spine.md) | **Plan** locking the Phase 3 contracts (SignalDecision, security master, fail-closed gates, paper fills, audit, report) before code |
 | 13 | [Phase 3 Build Plan](./13-phase3-build-plan.md) | **Build order** — turns doc 12 into a sequenced, tests-first task list (Tasks 0–8) with signatures, test lists, acceptance criteria |
 | 14 | [Phase 3 Integration Slice](./14-phase3-integration-slice.md) | **Plan** — connect the spine to the graph: PortfolioDecision → SignalDecision → Router for one dual-book paper session (still no live orders) |
-| 15 | [Agent Operating Layer — Build Plan](./15-agent-operating-layer-build-plan.md) | **Plan** — first safe agent_os slice: binding rules + playbook schema & cash-equity templates + toolset isolation + report→memory ingestion; never bypasses gates |
+| 15 | [Agent Operating Layer — Build Plan](./15-agent-operating-layer-build-plan.md) | **Plan** — first safe agent_os slice: binding rules + playbook schema & cash-equity templates + toolset isolation + report→memory ingestion; never bypasses gates (built + committed `6ce5db1`) |
+| 16 | [Rules → Prompt Binding](./16-rules-prompt-binding-plan.md) | **Plan** — agent_os Slice 2: inject a derived ≤800-token (relax to ≤1.2k only if a hard-stop/cap is dropped) binding rules digest into the PM prompt (alignment, not enforcement; the 15 gates remain the only backstop) |
+| 17 | [Codebase Audit Findings](./17-codebase-audit-findings.md) | **Findings catalog** — 63 issues (4 critical) from a 7-subsystem adversarial audit; input to a detailed fix plan. Batch A (NaN ingress) + Batch H (audit trust-anchor) gate the next live-data paper run |
 
 > Phase results live alongside the plan docs: [phase0](./phase0-results.md) ·
 > [phase1](./phase1-run-results.md) · [phase2](./phase2-results.md).
