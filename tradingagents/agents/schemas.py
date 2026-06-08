@@ -183,6 +183,17 @@ class PortfolioDecision(BaseModel):
             "Underweight / Sell, picked based on the analysts' debate."
         ),
     )
+    conviction: Literal["low", "medium", "high"] = Field(
+        description=(
+            "Your conviction in this rating, based on how strongly and consistently "
+            "the evidence supports it. Use 'high' when the analysts broadly agree and "
+            "the thesis is well-supported; 'medium' when the case is reasonable but "
+            "has notable counter-arguments or gaps; 'low' when the call is marginal, "
+            "the debate was close, or data was thin. This is the ONLY conviction "
+            "signal the execution layer uses to size a position, so be honest and "
+            "calibrated — overstating conviction directly oversizes real risk."
+        ),
+    )
     executive_summary: str = Field(
         description=(
             "A concise action plan covering entry strategy, position sizing, "

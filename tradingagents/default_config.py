@@ -124,10 +124,34 @@ DEFAULT_CONFIG = _apply_env_overrides({
     ],
     # NSE trading holidays (YYYY-MM-DD). When empty/None, the calendar falls
     # back to a CONSERVATIVE built-in set (fixed-date national holidays only).
-    # ⚠️ Populate with the full official NSE list (incl. movable holidays: Holi,
-    # Good Friday, Eid, Diwali/Muhurat, etc.) before live trading. See
-    # tradingagents/dataflows/india_calendar.py.
-    "nse_holidays": [],
+    # Below is the FULL official NSE 2026 Capital-Market trading-holiday list
+    # (weekday closures), cross-verified across three sources. Movable holidays
+    # are included. Holidays that fall on a weekend (Mahashivratri 2026-02-15 Sun,
+    # Id-Ul-Fitr 2026-03-21 Sat, Independence Day 2026-08-15 Sat, Diwali Laxmi
+    # Pujan 2026-11-08 Sun) are omitted — the weekend logic already closes them.
+    # NOTE: Muhurat trading (Sun 2026-11-08, special session) is NOT a holiday;
+    # in Phase 3 it is intentionally left to the weekend logic (treated as closed,
+    # i.e. the system does not trade the Muhurat session — the conservative choice).
+    # execution.assert_calendar_ready() refuses to run a daily pass unless this
+    # list is populated for the current year (Phase 3 build-step-0 blocker).
+    "nse_holidays": [
+        "2026-01-15",  # Municipal Corporation Election (Maharashtra)
+        "2026-01-26",  # Republic Day
+        "2026-03-03",  # Holi
+        "2026-03-26",  # Shri Ram Navami
+        "2026-03-31",  # Shri Mahavir Jayanti
+        "2026-04-03",  # Good Friday
+        "2026-04-14",  # Dr. Baba Saheb Ambedkar Jayanti
+        "2026-05-01",  # Maharashtra Day
+        "2026-05-28",  # Bakri Id
+        "2026-06-26",  # Muharram
+        "2026-09-14",  # Ganesh Chaturthi
+        "2026-10-02",  # Mahatma Gandhi Jayanti
+        "2026-10-20",  # Dussehra
+        "2026-11-10",  # Diwali Balipratipada
+        "2026-11-24",  # Prakash Gurpurb Sri Guru Nanak Dev
+        "2026-12-25",  # Christmas
+    ],
     # Subreddits the sentiment analyst searches (Phase 2: Indian-market subs,
     # replacing the US r/wallstreetbets etc.). Treat social sentiment as a
     # manipulation-prone signal, especially for illiquid small-caps.
