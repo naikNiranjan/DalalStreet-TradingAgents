@@ -63,12 +63,18 @@ def create_portfolio_manager(llm):
 
 Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
 
-        final_trade_decision = invoke_structured_or_freetext(
+        # return_parsed=True so we also keep the typed PortfolioDecision: the
+        # execution layer derives confidence from its ``conviction`` field, which
+        # render_pm_decision deliberately drops from the markdown. ``parsed`` is
+        # None whenever the free-text fallback fired (provider without structured
+        # output / malformed JSON) — the execution bridge maps that to a safe HOLD.
+        final_trade_decision, portfolio_decision = invoke_structured_or_freetext(
             structured_llm,
             llm,
             prompt,
             render_pm_decision,
             "Portfolio Manager",
+            return_parsed=True,
         )
 
         new_risk_debate_state = {
@@ -87,6 +93,10 @@ Be decisive and ground every conclusion in specific evidence from the analysts.{
         return {
             "risk_debate_state": new_risk_debate_state,
             "final_trade_decision": final_trade_decision,
+            # Additive: the typed decision (or None on free-text fallback). The
+            # markdown above is unchanged so memory log / CLI / saved reports
+            # keep working exactly as before.
+            "portfolio_decision": portfolio_decision,
         }
 
     return portfolio_manager_node

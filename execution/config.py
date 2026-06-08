@@ -138,3 +138,49 @@ class ExecutionConfig:
 
 # A module-level default the rest of the package imports when no override is passed.
 DEFAULT_EXECUTION_CONFIG = ExecutionConfig()
+
+
+# ---------------------------------------------------------------------------
+# Book-specific sizing configs (integration slice doc 14 §2a, reviewer-locked)
+# ---------------------------------------------------------------------------
+#
+# The committed defaults are correct for the ₹10L signal book but structurally
+# block the ₹25k shadow book: 10-15% of ₹25k = ₹2,500-3,750, both below the
+# ₹5,000 absolute deadband -> the shadow book never trades and the go-live-size
+# gate measures nothing. The shadow config raises the caps and drops the absolute
+# deadband floor so whole-share rounding (sub_economic_skipped) is the real
+# small-capital floor. Only these four params differ from the signal book.
+
+
+def signal_book_config() -> ExecutionConfig:
+    """₹10,00,000 signal-quality book — the committed defaults are its policy."""
+    return ExecutionConfig()
+
+
+def shadow_book_config() -> ExecutionConfig:
+    """₹25,000 go-live-size shadow book — concentration is unavoidable and the point."""
+    return ExecutionConfig(
+        position_cap_init=0.35,        # afford ≥1 share of an expensive name (1 TCS ≈ 15% of ₹25k)
+        position_cap_hard=0.40,        # concentration is unavoidable at ₹25k
+        deadband_min_notional=0.0,     # the ₹5k floor is 20% of ₹25k; let whole-share rounding be the floor
+        # deadband_equity_frac stays 0.02 (2% of ₹25k = ₹500 anti-churn floor, still relative)
+    )
+
+
+@dataclass(frozen=True)
+class BookSpec:
+    """One paper book: a display name, its starting capital, and its sizing policy."""
+
+    name: str
+    capital: float
+    config: ExecutionConfig
+
+
+def default_books() -> tuple[BookSpec, ...]:
+    """The locked dual-book setup: ₹10L signal book + ₹25k go-live shadow book."""
+    sig = signal_book_config()
+    sh = shadow_book_config()
+    return (
+        BookSpec("signal", sig.signal_book_capital, sig),
+        BookSpec("shadow", sh.shadow_book_capital, sh),
+    )

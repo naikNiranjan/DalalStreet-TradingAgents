@@ -11,7 +11,7 @@ from execution.audit import AuditLog
 from execution.brokers.paper import PaperBroker
 from execution.contracts import Action, Quote, SignalDecision
 from execution.portfolio import Portfolio
-from execution.report import SessionReport, build_book_report
+from execution.report import CoverageManifest, SessionReport, build_book_report
 from execution.router import Router
 from execution.security_master import SecurityMaster
 from tradingagents.default_config import DEFAULT_CONFIG
@@ -114,3 +114,55 @@ def test_dual_book_session_report_writes_md_and_jsonl(tmp_path):
     json_lines = [json.loads(l) for l in jsonl_path.read_text().splitlines() if l.strip()]
     assert len(json_lines) == 2
     assert {j["book"] for j in json_lines} == {"signal-quality ₹10L", "shadow ₹25k"}
+
+
+# --- coverage / analysis manifest (doc 14 §Coverage) ---------------------------
+
+
+def test_coverage_manifest_counts_and_skipped_detail():
+    cov = CoverageManifest(universe_planned=12, analyzed=10,
+                           skipped_detail={"WIPRO.NS": "graph_error: timeout"})
+    assert cov.skipped == 1
+    md = cov.to_markdown()
+    assert "planned 12" in md and "analyzed 10" in md and "skipped 1" in md
+    assert "WIPRO.NS" in md and "graph_error" in md
+
+
+def test_session_report_renders_coverage_header(tmp_path):
+    outcomes, pf, audit = _run(tmp_path)
+    book = build_book_report(book="signal", session_date="2026-06-09",
+                             starting_capital=1_000_000.0, outcomes=outcomes, portfolio=pf, audit=audit)
+    cov = CoverageManifest(universe_planned=12, analyzed=11,
+                           skipped_detail={"WIPRO.NS": "graph_error"}, unstructured=2)
+    session = SessionReport("2026-06-09", [book], coverage=cov)
+    md = session.to_markdown()
+    assert "planned 12" in md and "analyzed 11" in md and "skipped 1" in md
+    assert "unstructured" in md.lower()
+
+
+def test_session_jsonl_prepends_coverage_record_when_present(tmp_path):
+    outcomes, pf, audit = _run(tmp_path)
+    book = build_book_report(book="signal", session_date="2026-06-09",
+                             starting_capital=1_000_000.0, outcomes=outcomes, portfolio=pf, audit=audit)
+    cov = CoverageManifest(universe_planned=12, analyzed=11, skipped_detail={"WIPRO.NS": "graph_error"})
+    session = SessionReport("2026-06-09", [book], coverage=cov)
+    path = tmp_path / "r.jsonl"
+    session.write_jsonl(str(path))
+    lines = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+    assert len(lines) == 2                      # coverage manifest + 1 book line
+    assert lines[0]["record"] == "coverage"     # machine-readable, distinguishable
+    assert lines[0]["universe_planned"] == 12 and lines[0]["skipped"] == 1
+    assert "book" in lines[1]                    # book line unchanged
+
+
+def test_session_jsonl_omits_coverage_when_absent_backcompat(tmp_path):
+    """No coverage -> exactly one line per book (preserves the existing contract)."""
+    outcomes, pf, audit = _run(tmp_path)
+    book = build_book_report(book="signal", session_date="2026-06-09",
+                             starting_capital=1_000_000.0, outcomes=outcomes, portfolio=pf, audit=audit)
+    session = SessionReport("2026-06-09", [book])  # coverage defaults to None
+    path = tmp_path / "r.jsonl"
+    session.write_jsonl(str(path))
+    lines = [l for l in path.read_text().splitlines() if l.strip()]
+    assert len(lines) == 1
+    assert json.loads(lines[0])["book"] == "signal"

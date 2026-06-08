@@ -1,6 +1,8 @@
-from typing import Annotated
+from typing import Annotated, Optional
 from typing_extensions import TypedDict
 from langgraph.graph import MessagesState
+
+from tradingagents.agents.schemas import PortfolioDecision
 
 
 # Researcher team state
@@ -72,4 +74,11 @@ class AgentState(MessagesState):
         RiskDebateState, "Current state of the debate on evaluating risk"
     ]
     final_trade_decision: Annotated[str, "Final decision made by the Risk Analysts"]
+    # Additive (Phase 3 integration): the PM's typed decision, carried alongside
+    # the markdown so the execution layer can read ``conviction`` (which
+    # render_pm_decision drops). None when the PM fell back to free-text.
+    portfolio_decision: Annotated[
+        Optional[PortfolioDecision],
+        "Typed PortfolioDecision from the PM (None on free-text fallback)",
+    ]
     past_context: Annotated[str, "Memory log context injected at run start (same-ticker decisions + cross-ticker lessons)"]

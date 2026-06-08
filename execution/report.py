@@ -16,12 +16,60 @@ from __future__ import annotations
 import json
 from collections import Counter
 from dataclasses import asdict, dataclass, field
-from typing import Iterable
+from typing import Iterable, Optional
 
 from .audit import AuditLog
 from .router import ExecutionOutcome
 
-__all__ = ["BookReport", "SessionReport", "build_book_report"]
+__all__ = ["BookReport", "CoverageManifest", "SessionReport", "build_book_report"]
+
+
+@dataclass(frozen=True)
+class CoverageManifest:
+    """Analysis-phase coverage (doc 14 §Coverage) — so failures can't masquerade.
+
+    Records ``universe_planned / analyzed / skipped`` (with each skipped symbol +
+    reason) and how many analyzed signals fell back to free text (``unstructured``).
+    A run with many graph failures looks different from a clean smaller run.
+    """
+
+    universe_planned: int
+    analyzed: int
+    skipped_detail: dict = field(default_factory=dict)  # {symbol: reason}
+    unstructured: int = 0                                 # analyzed via free-text fallback (HOLD)
+
+    @property
+    def skipped(self) -> int:
+        return len(self.skipped_detail)
+
+    def to_markdown(self) -> str:
+        lines = [
+            f"**Coverage:** planned {self.universe_planned} · analyzed {self.analyzed} · "
+            f"skipped {self.skipped} · unstructured (free-text→HOLD) {self.unstructured}",
+        ]
+        for sym, reason in sorted(self.skipped_detail.items()):
+            lines.append(f"  - skipped {sym}: {reason}")
+        return "\n".join(lines)
+
+    def to_json_line(self) -> str:
+        return json.dumps({
+            "record": "coverage",
+            "universe_planned": self.universe_planned,
+            "analyzed": self.analyzed,
+            "skipped": self.skipped,
+            "skipped_detail": self.skipped_detail,
+            "unstructured": self.unstructured,
+        }, ensure_ascii=True, sort_keys=True)
+
+    @classmethod
+    def from_manifest_dict(cls, d: dict) -> "CoverageManifest":
+        """Rebuild from a ``to_json_line`` dict (``skipped`` is recomputed, not read)."""
+        return cls(
+            universe_planned=int(d["universe_planned"]),
+            analyzed=int(d["analyzed"]),
+            skipped_detail=dict(d.get("skipped_detail") or {}),
+            unstructured=int(d.get("unstructured", 0)),
+        )
 
 
 @dataclass(frozen=True)
@@ -95,9 +143,12 @@ class BookReport:
 class SessionReport:
     session_date: str
     reports: list = field(default_factory=list)  # list[BookReport]
+    coverage: Optional[CoverageManifest] = None
 
     def to_markdown(self) -> str:
         head = [f"# Paper Session Report — {self.session_date}", ""]
+        if self.coverage is not None:
+            head += [self.coverage.to_markdown(), ""]
         return "\n".join(head + [r.to_markdown() + "\n" for r in self.reports])
 
     def write_markdown(self, path: str) -> None:
@@ -106,6 +157,10 @@ class SessionReport:
 
     def write_jsonl(self, path: str) -> None:
         with open(path, "w", encoding="utf-8") as fh:
+            # When present, the coverage manifest is the first line (tagged
+            # record="coverage") so it's machine-distinguishable from book lines.
+            if self.coverage is not None:
+                fh.write(self.coverage.to_json_line() + "\n")
             for r in self.reports:
                 fh.write(r.to_json_line() + "\n")
 

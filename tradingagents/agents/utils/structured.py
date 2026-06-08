@@ -19,7 +19,7 @@ all three agents log the same warnings when fallback fires.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, Optional, Tuple, TypeVar, Union
 
 from pydantic import BaseModel
 
@@ -51,18 +51,28 @@ def invoke_structured_or_freetext(
     prompt: Any,
     render: Callable[[T], str],
     agent_name: str,
-) -> str:
+    *,
+    return_parsed: bool = False,
+) -> Union[str, Tuple[str, Optional[T]]]:
     """Run the structured call and render to markdown; fall back to free-text on any failure.
 
     ``prompt`` is whatever the underlying LLM accepts (a string for chat
     invocations, a list of message dicts for chat models that take that
     shape). The same value is forwarded to the free-text path so the
     fallback sees the same input the structured call did.
+
+    ``return_parsed`` is **opt-in** and defaults to ``False`` so the shared
+    contract is unchanged: existing callers (Sentiment / Research Manager /
+    Trader) keep receiving a plain ``str``. When ``True``, the caller (only the
+    Portfolio Manager, which needs the typed ``conviction`` the markdown drops)
+    receives ``(markdown, parsed_or_None)`` — the parsed object on the
+    structured path, ``None`` whenever the free-text fallback fired.
     """
     if structured_llm is not None:
         try:
             result = structured_llm.invoke(prompt)
-            return render(result)
+            rendered = render(result)
+            return (rendered, result) if return_parsed else rendered
         except Exception as exc:
             logger.warning(
                 "%s: structured-output invocation failed (%s); retrying once as free text",
@@ -70,4 +80,5 @@ def invoke_structured_or_freetext(
             )
 
     response = plain_llm.invoke(prompt)
-    return response.content
+    rendered = response.content
+    return (rendered, None) if return_parsed else rendered
