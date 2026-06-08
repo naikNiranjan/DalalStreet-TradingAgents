@@ -1,0 +1,47 @@
+# agent_os/toolsets.yaml — Declarative toolset definitions
+#
+# FORMAT: simple key: value lines, lists use "- item" under a key.
+# Deliberately simple so a tiny stdlib parser handles it (no PyYAML).
+#
+# Sections:
+#   toolsets:  <name>: [tool1, tool2, ...]
+#   modes:     <paper|live>: [toolset1, toolset2, ...]
+#
+# THE ONE INVARIANT: the live toolset is registered ONLY when mode==live AND armed==True.
+# Paper mode NEVER gets the live toolset.
+
+toolsets:
+  data_toolset:
+    - get_prices
+    - get_news
+    - get_fundamentals
+    - get_ohlcv
+    - security_master_lookup
+
+  analysis_toolset:
+    - run_analysis
+
+  paper_toolset:
+    - paper_run_session
+    - paper_run_execution
+
+  audit_toolset:
+    - audit_read_all
+    - audit_verify
+
+  live_toolset:
+    - place_live_order
+
+modes:
+  paper:
+    - data_toolset
+    - analysis_toolset
+    - paper_toolset
+    - audit_toolset
+
+  live:
+    - data_toolset
+    - analysis_toolset
+    - paper_toolset
+    - audit_toolset
+    - live_toolset
