@@ -27,6 +27,7 @@ Indian-market (NSE/BSE) automated trading agent** — paper-trading first, then 
 | 11 | [Success Metrics](./11-success-metrics.md) | The paper→live gate. Defined **before** coding so results can't be rationalized |
 | 12 | [Phase 3 Execution Spine](./12-phase3-execution-spine.md) | **Plan** locking the Phase 3 contracts (SignalDecision, security master, fail-closed gates, paper fills, audit, report) before code |
 | 13 | [Phase 3 Build Plan](./13-phase3-build-plan.md) | **Build order** — turns doc 12 into a sequenced, tests-first task list (Tasks 0–8) with signatures, test lists, acceptance criteria |
+| 14 | [Phase 3 Integration Slice](./14-phase3-integration-slice.md) | **Plan** — connect the spine to the graph: PortfolioDecision → SignalDecision → Router for one dual-book paper session (still no live orders) |
 
 > Phase results live alongside the plan docs: [phase0](./phase0-results.md) ·
 > [phase1](./phase1-run-results.md) · [phase2](./phase2-results.md).
