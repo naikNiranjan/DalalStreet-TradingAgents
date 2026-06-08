@@ -32,6 +32,7 @@ Indian-market (NSE/BSE) automated trading agent** — paper-trading first, then 
 | 15 | [Agent Operating Layer — Build Plan](./15-agent-operating-layer-build-plan.md) | **Plan** — first safe agent_os slice: binding rules + playbook schema & cash-equity templates + toolset isolation + report→memory ingestion; never bypasses gates (built + committed `6ce5db1`) |
 | 16 | [Rules → Prompt Binding](./16-rules-prompt-binding-plan.md) | **Plan** — agent_os Slice 2: inject a derived ≤800-token (relax to ≤1.2k only if a hard-stop/cap is dropped) binding rules digest into the PM prompt (alignment, not enforcement; the 15 gates remain the only backstop) |
 | 17 | [Codebase Audit Findings](./17-codebase-audit-findings.md) | **Findings catalog** — 63 issues (4 critical) from a 7-subsystem adversarial audit; input to a detailed fix plan. Batch A (NaN ingress) + Batch H (audit trust-anchor) gate the next live-data paper run |
+| 18 | [P0 Safety Hardening (Batch A + H)](./18-p0-safety-hardening-batch-a-h.md) | **Plan** — the two P0 blockers as one tests-first slice: **non-finite (NaN ∪ ±Inf)** fail-open + crash hardening (gates/sizer/quote-ingress/router-MTM, entry-side & exit-safe) and the audit trust-anchor (verify() never raises/fails-open; created-at-init anchor + path-keyed daily-roots ledger; portfolio **finite cost-basis fallback + `marks_incomplete`**, no NaN-poison) |
 
 > Phase results live alongside the plan docs: [phase0](./phase0-results.md) ·
 > [phase1](./phase1-run-results.md) · [phase2](./phase2-results.md).
