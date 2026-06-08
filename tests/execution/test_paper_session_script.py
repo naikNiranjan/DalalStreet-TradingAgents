@@ -66,3 +66,11 @@ class TestPaperSessionScript:
         sm, refreshed_at = mod._build_security_master()
         assert calls["n"] == 1          # refresh happens regardless of run mode
         assert refreshed_at is not None  # a real timestamp to stamp into signal freshness
+
+    def test_llm_provider_defaults_to_foundry_not_openai(self):
+        """The paper session must run on Azure Foundry (role-routed), never silently
+        on the bare-default OpenAI endpoint. CLI > env > azure-foundry."""
+        mod = _load()
+        assert mod._resolve_llm_provider(None, None) == "azure-foundry"
+        assert mod._resolve_llm_provider(None, "openai") == "openai"        # env respected
+        assert mod._resolve_llm_provider("anthropic", "openai") == "anthropic"  # CLI wins

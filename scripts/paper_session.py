@@ -59,7 +59,22 @@ def _parse_args(argv=None) -> argparse.Namespace:
                    help="Which paper book(s) to run (default: both).")
     p.add_argument("--out-dir", default="runs", help="Where to write reports/audit (default: runs/).")
     p.add_argument("--signals-path", help="Path for the persisted signals hand-off file.")
+    p.add_argument("--llm-provider",
+                   help="LLM provider override (default: TRADINGAGENTS_LLM_PROVIDER env, "
+                        "else 'azure-foundry' — this project's native provider).")
     return p.parse_args(argv)
+
+
+def _resolve_llm_provider(cli_value, env_value):
+    """Pick the LLM provider for the run.
+
+    Priority: explicit ``--llm-provider`` > ``TRADINGAGENTS_LLM_PROVIDER`` env >
+    ``azure-foundry`` (this project's native, role-routed provider). The bare
+    DEFAULT_CONFIG default is ``openai`` (api.openai.com), which would silently run
+    the India stack on the wrong endpoint/models — so the paper session defaults to
+    Foundry instead of inheriting that.
+    """
+    return cli_value or env_value or "azure-foundry"
 
 
 def _select_books(which: str):
@@ -89,7 +104,13 @@ def _build_security_master():
 
 def main(argv=None) -> int:
     args = _parse_args(argv)
-    config = DEFAULT_CONFIG
+    # Copy so we can set the provider without mutating the shared module default,
+    # then route the LLMs through Azure Foundry (this project's native provider)
+    # unless explicitly overridden — never the bare-default OpenAI endpoint.
+    config = dict(DEFAULT_CONFIG)
+    config["llm_provider"] = _resolve_llm_provider(
+        args.llm_provider, os.environ.get("TRADINGAGENTS_LLM_PROVIDER")
+    )
 
     now_ist = datetime.now(IST)
     session_date = date.fromisoformat(args.date) if args.date else now_ist.date()
@@ -133,7 +154,7 @@ def main(argv=None) -> int:
         signals_path=signals_path,
     )
 
-    print(f"Session {result.session_date}")
+    print(f"Session {result.session_date}  ·  LLM provider: {config['llm_provider']}")
     if result.coverage is not None:
         c = result.coverage
         print(f"  coverage: planned {c.universe_planned} · analyzed {c.analyzed} · "
